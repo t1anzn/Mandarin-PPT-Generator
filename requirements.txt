@@ -1,0 +1,4 @@
+python-pptx
+gTTS
+pypinyin
+tkinter
