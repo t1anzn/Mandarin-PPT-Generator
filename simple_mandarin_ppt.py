@@ -8,6 +8,10 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 from gtts import gTTS
 from pptx.enum.shapes import MSO_SHAPE_TYPE
+import tkinter as tk
+from tkinter import filedialog, messagebox
+import requests
+import threading
 
 # Function to create a PowerPoint presentation from a template
 def create_ppt_from_template(vocab_list, template_path, output_path):
@@ -71,15 +75,73 @@ def create_ppt_from_template(vocab_list, template_path, output_path):
                     else:
                         print(f"Failed to create audio file '{audio_path}'.")
 
-                    # Use the position of the media placeholder
-                    left = placeholder.left
-                    top = placeholder.top
+                    # Use the position and size of the media placeholder (idx 15)
+                    if placeholder.placeholder_format.idx == 15:
+                        left = placeholder.left
+                        top = placeholder.top
+                        width = placeholder.width
+                        height = placeholder.height
 
-                    # Add the audio as a media shape to the slide
-                    slide.shapes.add_movie(audio_path, left, top, width=placeholder.width, height=placeholder.height)
-                    print(f"Added audio '{audio_path}' to the slide at the position of the media placeholder for '{chinese}'.")
+                        # Add the audio as a media shape to the slide at the media placeholder's position
+                        slide.shapes.add_movie(audio_path, left, top, width=width, height=height)
+                        print(f"Inserted audio '{audio_path}' at the position of the media placeholder for '{chinese}'.")
+
+                    if placeholder.shape_type == MSO_SHAPE_TYPE.MEDIA:
+                        left = placeholder.left
+                        top = placeholder.top
+                        width = placeholder.width
+                        height = placeholder.height
+
+                        # Add a transparent rectangle over the speaker icon
+                        transparent_shape = slide.shapes.add_shape(
+                            MSO_SHAPE_TYPE.RECTANGLE, left, top, width, height
+                        )
+                        transparent_shape.fill.solid()
+                        transparent_shape.fill.fore_color.rgb = RGBColor(255, 255, 255)  # White color
+                        transparent_shape.fill.transparency = 1.0  # Fully transparent
+                        transparent_shape.line.fill.background()  # No border
+
+                        print(f"Added a transparent clickable shape over the speaker icon for '{chinese}'.")
+
                 except Exception as e:
                     print(f"Error adding audio for '{chinese}': {e}")
+
+        # Add Pixabay images to the left side of the slide
+        image_query = english.replace(" ", "+")  # Use the English word as the query
+        api_key = "49711697-387fe155204b00a0af7ff7360"  # Replace with your actual API key
+        image_url = search_pixabay_images(image_query, api_key)
+
+        if image_url:
+            try:
+                # Download the image
+                image_path = f"media/{image_query}.jpg"
+                response = requests.get(image_url, stream=True)
+                response.raise_for_status()
+                with open(image_path, "wb") as image_file:
+                    for chunk in response.iter_content(1024):
+                        image_file.write(chunk)
+
+                # Adjust the image position and size to be larger and more centered, but slightly to the left
+                left = Inches(1.5)  # Slightly more to the left
+                top = Inches(1.5)   # Centered vertically
+                slide.shapes.add_picture(image_path, left, top, width=Inches(5), height=Inches(5))
+
+                # Remove the attribution text below the image
+                # Removed the 'Image by Pixabay' text addition logic
+
+                print(f"Added image for '{english}' to the slide.")
+            except Exception as e:
+                print(f"Error adding image for '{english}': {e}")
+        else:
+            # Use the placeholder image if no image is found
+            placeholder_path = "media/placeholder-image.png"
+            if os.path.exists(placeholder_path):
+                left = Inches(1.5)  # Slightly more to the left
+                top = Inches(1.5)   # Centered vertically
+                slide.shapes.add_picture(placeholder_path, left, top, width=Inches(5), height=Inches(5))
+                print(f"Added placeholder image for '{english}' to the slide.")
+            else:
+                print(f"Placeholder image not found at {placeholder_path}. Skipping image addition.")
 
     # Remove the original template slide safely
     xml_slides = prs.slides._sldIdLst  # Access the slide ID list
@@ -90,56 +152,453 @@ def create_ppt_from_template(vocab_list, template_path, output_path):
     prs.save(output_path)
     print(f"Presentation saved to {output_path}")
 
-if __name__ == "__main__":
-    vocab = []
-    input_method = input("Enter '1' to load vocabulary from a CSV file or '2' to input manually: ").strip()
+    # Auto-delete the generated mp3 files
+    for file_name in os.listdir("media"):
+        if file_name.endswith(".mp3"):
+            file_path = os.path.join("media", file_name)
+            try:
+                os.remove(file_path)
+                print(f"Deleted audio file: {file_path}")
+            except Exception as e:
+                print(f"Error deleting file {file_path}: {e}")
 
-    if input_method == '1':
-        csv_file = input("Enter the path to the CSV file (default: example_vocab.csv): ").strip()
-        if not csv_file:
-            csv_file = "example_vocab.csv"
+    # Auto-delete the downloaded images after saving the presentation, except for placeholder-image.png
+    for file_name in os.listdir("media"):
+        if file_name.endswith(".jpg") and file_name != "placeholder-image.png":
+            file_path = os.path.join("media", file_name)
+            try:
+                os.remove(file_path)
+                print(f"Deleted image file: {file_path}")
+            except Exception as e:
+                print(f"Error deleting file {file_path}: {e}")
 
-        try:
-            with open(csv_file, mode="r", encoding="utf-8") as file:
-                reader = csv.reader(file)
-                for row in reader:
-                    if len(row) >= 2:
-                        chinese, english = row[0].strip(), row[1].strip()
-                        vocab.append((chinese, english))
-        except FileNotFoundError:
-            print(f"Error: File '{csv_file}' not found. Exiting.")
-            exit(1)
-    elif input_method == '2':
-        print("Paste vocabulary pairs in the format 'Chinese, English', one pair per line.")
-        print("Type 'done' on a new line when you are finished.")
-        bulk_input = []
-        while True:
-            line = input().strip()
-            if line.lower() == 'done':
-                break
-            bulk_input.append(line)
+# Function to search for images using the Pixabay API
+def search_pixabay_images(query, api_key):
+    base_url = "https://pixabay.com/api/"
+    # Properly encode the query to handle spaces and special characters
+    encoded_query = query.replace(" ", "+")
+    params = {
+        "key": api_key,
+        "q": encoded_query,  # Use the encoded query
+        "image_type": "illustration",  # Fetch illustration images
+        "safesearch": "true"
+    }
 
-        for line in bulk_input:
-            if ',' in line:
-                chinese, english = map(str.strip, line.split(',', 1))
-                vocab.append((chinese, english))
+    try:
+        response = requests.get(base_url, params=params)
+        response.raise_for_status()  # Raise an error for HTTP issues
+        data = response.json()
+
+        if "hits" in data and len(data["hits"]) > 0:
+            return data["hits"][0]["largeImageURL"]  # Return the first image URL
+        else:
+            print(f"No images found for query: {query}")
+            return None
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching images from Pixabay: {e}")
+        return None
+
+def run_gui():
+    def select_csv():
+        file_path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
+        if file_path:
+            csv_path_var.set(file_path)
+
+    # Set the default template path
+    default_template_path = "template.pptx"
+
+    def select_template():
+        file_path = filedialog.askopenfilename(filetypes=[("PowerPoint Files", "*.pptx")])
+        if file_path:
+            template_path_var.set(file_path)
+        else:
+            # If no custom template is selected, use the default template
+            template_path_var.set(default_template_path)
+
+    # Create the Tk root window first
+    root = tk.Tk()
+    root.title("Mandarin Vocabulary Presentation Generator")
+    root.geometry("750x450")  # Adjusted size to better fit all content
+    root.configure(bg="#f4f4f9")  # Set a light corporate background color
+    root.resizable(False, False)  # Disable resizing to make the window fixed size
+
+    # Pre-fill the template path with the default template
+    template_path_var = tk.StringVar(value=default_template_path)
+    
+    # Define use_default_template before it's used
+    use_default_template = tk.BooleanVar(value=True)
+
+    # Ensure language_var is defined before toggle_template is called
+    language_var = tk.StringVar(value="en")
+
+    # Update the toggle_template function to use language_var safely
+    def toggle_template():
+        if use_default_template.get():
+            template_path_var.set(default_template_path)
+            template_label.config(
+                text=("PowerPoint 模板文件 (默认)" if language_var.get() == "zh" else "PowerPoint Template File (Default)"),
+                fg="#28a745"
+            )  # Green for default
+            template_entry.config(state="disabled")
+            browse_button.config(state="disabled")
+        else:
+            template_label.config(
+                text=("PowerPoint 模板文件 (自定义)" if language_var.get() == "zh" else "PowerPoint Template File (Custom)"),
+                fg="#333333"
+            )  # Normal color for custom
+            template_entry.config(state="normal")
+            browse_button.config(state="normal")
+
+    # Highlight the default template in the GUI
+    def update_template_highlight():
+        if template_path_var.get() == default_template_path:
+            template_label.config(fg="#333333", font=("Helvetica", 12))  # Normal text style for default
+        else:
+            template_label.config(fg="#333333", font=("Helvetica", 12))  # Normal style for custom
+        
+        # Remove the call to update_language to avoid circular dependency
+
+    # Update the highlight whenever the template path changes
+    template_path_var.trace_add("write", lambda *args: update_template_highlight())
+
+    # Define template_label before calling update_template_highlight
+    template_label = tk.Label(
+        root,
+        text="Select PowerPoint Template:",
+        font=("Helvetica", 12),
+        fg="#333333",
+        bg="#f4f4f9"
+    )
+    template_label.grid(row=4, column=0, sticky="e", padx=10, pady=5)
+
+    # Call the highlight function initially to set the default state
+    update_template_highlight()
+
+    def generate_ppt_thread():
+        def task():
+            # Disable the Generate button and remove hover effects to prevent multiple generations
+            generate_button.config(state="disabled")
+            generate_button.unbind("<Enter>")
+            generate_button.unbind("<Leave>")
+
+            csv_path = csv_path_var.get()
+            template_path = template_path_var.get()
+            output_path = output_path_var.get()
+
+            if not csv_path or not template_path or not output_path:
+                messagebox.showerror("Error", "Please fill in all fields.")
+                generate_button.config(state="normal")  # Re-enable the button
+                generate_button.bind("<Enter>", on_enter_green)
+                generate_button.bind("<Leave>", on_leave_green)
+                return
+
+            if not output_path.lower().endswith(".pptx"):
+                output_path += ".pptx"
+
+            try:
+                # Show a loading message
+                loading_label = tk.Label(
+                    root,
+                    text="Generating PowerPoint... Please wait.",
+                    font=("Helvetica", 12),
+                    fg="#333333",
+                    bg="#f4f4f9"
+                )
+                loading_label.grid(row=9, column=0, columnspan=3, pady=10)
+                root.update_idletasks()
+
+                vocab = []
+                with open(csv_path, mode="r", encoding="utf-8") as file:
+                    reader = csv.reader(file)
+                    for row in reader:
+                        if len(row) >= 2:
+                            chinese, english = row[0].strip(), row[1].strip()
+                            vocab.append((chinese, english))
+
+                create_ppt_from_template(vocab, template_path, output_path)
+
+                # Remove the loading message
+                loading_label.destroy()
+
+                # Open the presentation automatically
+                try:
+                    os.startfile(output_path)
+                    print(f"Opening PowerPoint file: {output_path}")
+                except Exception as e:
+                    print(f"Error opening PowerPoint file: {e}")
+
+                messagebox.showinfo("Success", f"Presentation saved to {output_path}")
+            except Exception as e:
+                # Remove the loading message in case of an error
+                loading_label.destroy()
+                messagebox.showerror("Error", f"An error occurred: {e}")
+            finally:
+                # Re-enable the Generate button and restore hover effects
+                generate_button.config(state="normal")
+                generate_button.bind("<Enter>", on_enter_green)
+                generate_button.bind("<Leave>", on_leave_green)
+
+        # Run the task in a separate thread
+        threading.Thread(target=task).start()
+
+    # Adjust title label
+    title_label = tk.Label(
+        root,
+        text="Mandarin Vocabulary Presentation Generator",
+        font=("Helvetica", 16, "bold"),
+        fg="#333333",
+        bg="#f4f4f9"
+    )
+    title_label.grid(row=0, column=0, columnspan=3, pady=10)
+
+    # Adjust separator
+    separator = tk.Frame(root, height=2, bd=0, relief="solid", bg="#cccccc")
+    separator.grid(row=1, column=0, columnspan=3, sticky="we", pady=10)
+
+    # Adjust CSV file input
+    csv_label = tk.Label(
+        root,
+        text="Vocabulary CSV File:",
+        font=("Helvetica", 12),
+        fg="#333333",
+        bg="#f4f4f9"
+    )
+    csv_label.grid(row=2, column=0, sticky="e", padx=10, pady=5)
+    csv_path_var = tk.StringVar()
+    tk.Entry(
+        root,
+        textvariable=csv_path_var,
+        width=50,
+        font=("Helvetica", 10),
+        bd=2,
+        relief="groove"
+    ).grid(row=2, column=1, pady=5)
+    csv_browse_button = tk.Button(
+        root,
+        text="Browse",
+        command=select_csv,
+        font=("Helvetica", 10),
+        bg="#0078d7",
+        fg="white",
+        relief="flat",
+        padx=10
+    )
+    csv_browse_button.grid(row=2, column=2, padx=10, pady=5)
+
+    # Adjust template file input
+    template_entry = tk.Entry(
+        root,
+        textvariable=template_path_var,
+        width=50,
+        font=("Helvetica", 10),
+        bd=2,
+        relief="groove"
+    )
+    template_entry.grid(row=4, column=1, pady=5)
+
+    browse_button = tk.Button(
+        root,
+        text="Browse",
+        command=select_template,
+        font=("Helvetica", 10),
+        bg="#0078d7",
+        fg="white",
+        relief="flat",
+        padx=10
+    )
+    browse_button.grid(row=4, column=2, padx=10, pady=5)
+
+    # Define the checkbox for toggling the default template - giving it its own row
+    checkbox = tk.Checkbutton(
+        root,
+        text="Use Default Template",
+        variable=use_default_template,
+        command=toggle_template,
+        font=("Helvetica", 10),
+        bg="#f4f4f9"
+    )
+    checkbox.grid(row=5, column=1, pady=5, sticky="w")  # Now in its own row (5)
+
+    # Adjust output file name input
+    output_label = tk.Label(
+        root,
+        text="Output File Name:",
+        font=("Helvetica", 12),
+        fg="#333333",
+        bg="#f4f4f9"
+    )
+    output_label.grid(row=6, column=0, sticky="e", padx=10, pady=5)  # Moved to row 6
+    output_path_var = tk.StringVar()
+    tk.Entry(
+        root,
+        textvariable=output_path_var,
+        width=50,
+        font=("Helvetica", 10),
+        bd=2,
+        relief="groove"
+    ).grid(row=6, column=1, pady=5)  # Moved to row 6
+
+    # Adjust generate button - move to row 7
+    generate_button = tk.Button(
+        root,
+        text="Generate Presentation",
+        command=generate_ppt_thread,
+        font=("Helvetica", 12, "bold"),
+        bg="#28a745",
+        fg="white",
+        relief="flat",
+        padx=15,
+        pady=5
+    )
+    generate_button.grid(row=7, column=0, columnspan=3, pady=20)  # Changed from row 6 to row 7
+
+    # Adjust instructions
+    instructions_label = tk.Label(
+        root,
+        text=(
+            "CSV Format: Each row should contain two columns: Chinese and English words, separated by a comma.\n"
+            "Example:\n"
+            "你好,Hello\n"
+            "谢谢,Thank you\n"
+            "再见,Goodbye\n"
+        ),
+        font=("Helvetica", 10),
+        fg="#333333",
+        bg="#f4f4f9",
+        wraplength=700,
+        justify="left",
+    )
+    instructions_label.grid(row=8, column=0, columnspan=3, pady=10)  # Changed from row 7 to row 8
+
+    # Adjust footer
+    footer_label = tk.Label(
+        root,
+        text="Developed for Professional Use",
+        font=("Helvetica", 10, "italic"),
+        fg="#666666",
+        bg="#f4f4f9"
+    )
+    footer_label.grid(row=9, column=0, columnspan=3, pady=10)  # Changed from row 8 to row 9
+
+    # Add a language toggle button
+    def toggle_language():
+        if language_var.get() == "en":
+            language_var.set("zh")
+            update_language("zh")
+        else:
+            language_var.set("en")
+            update_language("en")
+
+    # Ensure update_language is defined before update_template_highlight
+    def update_language(lang):
+        if lang == "zh":
+            title_label.config(text="普通话词汇演示文稿生成器")
+            csv_label.config(text="词汇 CSV 文件：")
+            template_label.config(text="选择 PowerPoint 模板：")  # This is the key line for translation
+            checkbox.config(text="使用默认模板")
+            browse_button.config(text="浏览")
+            csv_browse_button.config(text="浏览")
+            output_label.config(text="输出文件名：")
+            generate_button.config(text="生成演示文稿")
+            instructions_label.config(
+                text=(
+                    "CSV 格式：每行应包含两列：中文和英文单词，用逗号分隔。\n"
+                    "示例：\n"
+                    "你好,Hello\n"
+                    "谢谢,Thank you\n"
+                    "再见,Goodbye\n"
+                )
+            )
+            footer_label.config(text="为专业用途开发")
+            
+            # Force update the template label based on current state
+            if use_default_template.get():
+                template_label.config(text="选择 PowerPoint 模板：", fg="#28a745")
             else:
-                print(f"Skipping invalid line: {line}. Please use 'Chinese, English' format.")
-    else:
-        print("Invalid option. Exiting.")
-        exit(1)
+                template_label.config(text="选择 PowerPoint 模板：", fg="#333333")
+                
+        else:
+            title_label.config(text="Mandarin Vocabulary Presentation Generator")
+            csv_label.config(text="Vocabulary CSV File:")
+            template_label.config(text="Select PowerPoint Template:")  # This is the key line for translation
+            checkbox.config(text="Use Default Template")
+            browse_button.config(text="Browse")
+            csv_browse_button.config(text="Browse")
+            output_label.config(text="Output File Name:")
+            generate_button.config(text="Generate Presentation")
+            instructions_label.config(
+                text=(
+                    "CSV Format: Each row should contain two columns: Chinese and English words, separated by a comma.\n"
+                    "Example:\n"
+                    "你好,Hello\n"
+                    "谢谢,Thank you\n"
+                    "再见,Goodbye\n"
+                )
+            )
+            footer_label.config(text="Developed for Professional Use")
+            
+            # Force update the template label based on current state
+            if use_default_template.get():
+                template_label.config(text="Select PowerPoint Template:", fg="#28a745")
+            else:
+                template_label.config(text="Select PowerPoint Template:", fg="#333333")
 
-    if not vocab:
-        print("No vocabulary provided. Exiting.")
-    else:
-        template_path = input("Enter the path to the PowerPoint template file (default: template.pptx): ").strip()
-        if not template_path:
-            template_path = "template.pptx"
+    language_var = tk.StringVar(value="en")
+    language_button = tk.Button(
+        root,
+        text="中文/English",
+        command=toggle_language,
+        font=("Helvetica", 10),
+        bg="#0078d7",
+        fg="white",
+        relief="flat",
+        padx=10
+    )
+    language_button.grid(row=9, column=2, pady=10, sticky="e")
 
-        output_path = input("Enter output file path (default: Mandarin_Vocabulary_PPT.pptx): ").strip()
-        if not output_path:
-            output_path = "Mandarin_Vocabulary_PPT.pptx"
-        elif not output_path.lower().endswith(".pptx"):
-            output_path += ".pptx"
+    # Add hover effect for buttons
+    def on_enter(e):
+        e.widget["bg"] = "#0056a3"  # Darker blue for hover
 
-        create_ppt_from_template(vocab, template_path, output_path)
+    def on_leave(e):
+        e.widget["bg"] = "#0078d7"  # Original blue
+
+    def on_enter_green(e):
+        e.widget["bg"] = "#1e7e34"  # Darker green for hover
+
+    def on_leave_green(e):
+        e.widget["bg"] = "#28a745"  # Original green
+
+    # Apply hover effects to buttons
+    for button in [
+        language_button,
+        generate_button,
+        csv_browse_button,  # CSV Browse button
+        browse_button   # Template Browse button
+    ]:
+        if button == generate_button:
+            button.bind("<Enter>", on_enter_green)
+            button.bind("<Leave>", on_leave_green)
+        else:
+            button.bind("<Enter>", on_enter)
+            button.bind("<Leave>", on_leave)
+
+    # Configure grid weights for proper responsiveness
+    for i in range(9):  # Adjust row weights
+        root.grid_rowconfigure(i, weight=1)
+
+    for i in range(3):  # Adjust column weights
+        root.grid_columnconfigure(i, weight=1)
+
+    # Initialize the toggle state
+    toggle_template()
+    
+    # Ensure template entry and browse button are initially disabled when default is selected
+    if use_default_template.get():
+        template_entry.config(state="disabled")
+        browse_button.config(state="disabled")
+
+    root.mainloop()
+
+if __name__ == "__main__":
+    run_gui()
