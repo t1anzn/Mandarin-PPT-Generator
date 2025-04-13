@@ -12,37 +12,28 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import requests
 import threading
+from deep_translator import GoogleTranslator
 
 # Function to create a PowerPoint presentation from a template
 def create_ppt_from_template(vocab_list, template_path, output_path):
     """
-    Create a PowerPoint presentation using a pre-configured template.
-
-    Args:
-        vocab_list (list of tuples): List of (Chinese, English) pairs.
-        template_path (str): Path to the PowerPoint template file.
-        output_path (str): Path to save the generated PowerPoint file.
+    Create a PowerPoint presentation using a template file.
     """
-    # Debugging: Log the path of the template file
     print(f"Loading template from: {template_path}")
 
-    # Debugging: Log the modification timestamp of the template file
     if os.path.exists(template_path):
         modification_time = os.path.getmtime(template_path)
         print(f"Template last modified: {modification_time} (Unix timestamp)")
 
-    # Load the template
+    # Load template and get first slide
     prs = Presentation(template_path)
-
-    # Get the first slide in the template
     template_slide = prs.slides[0]
 
-    # Debugging: Log all placeholders in the template slide
+    # Log placeholders for debugging
     print("Template slide placeholders:")
     for placeholder in template_slide.placeholders:
         print(f"  idx: {placeholder.placeholder_format.idx}, name: {placeholder.name}, type: {placeholder.placeholder_format.type}")
 
-    # Debugging: Log all shapes in the template slide to identify image placeholders
     print("Template slide shapes:")
     for shape in template_slide.shapes:
         if shape.is_placeholder:
@@ -50,58 +41,53 @@ def create_ppt_from_template(vocab_list, template_path, output_path):
         else:
             print(f"  Shape: {shape.name}, not a placeholder")
 
+    # Loop through each vocabulary pair and create a slide
     for chinese, english in vocab_list:
         # Duplicate the template slide
         slide = prs.slides.add_slide(template_slide.slide_layout)
 
         # Populate placeholders using their idx values
         for placeholder in slide.placeholders:
-            if placeholder.placeholder_format.idx == 0:  # Title 1 for CHINESE_PLACEHOLDER
+            if placeholder.placeholder_format.idx == 0:  # Chinese title
                 placeholder.text = chinese
-            elif placeholder.placeholder_format.idx == 1:  # Subtitle 2 for ENGLISH_PLACEHOLDER
+            elif placeholder.placeholder_format.idx == 1:  # English subtitle
                 placeholder.text = english
-            elif placeholder.placeholder_format.idx == 14:  # Updated idx for PINYIN_PLACEHOLDER
+            elif placeholder.placeholder_format.idx == 14:  # Pinyin text
                 placeholder.text = ' '.join([p[0] for p in pinyin(chinese, style=Style.TONE)])
-            elif placeholder.placeholder_format.idx == 15:  # Media Placeholder for SOUND_ICON_PLACEHOLDER
+            elif placeholder.placeholder_format.idx == 15:  # Audio placeholder
                 try:
-                    # Generate TTS audio for the Chinese word
+                    # Generate and add TTS audio
                     tts = gTTS(chinese, lang='zh')
                     audio_path = f"media/{chinese}.mp3"
                     tts.save(audio_path)
 
-                    # Debugging: Check if the audio file was created
                     if os.path.exists(audio_path):
-                        print(f"Audio file '{audio_path}' successfully created.")
+                        print(f"Audio file '{audio_path}' created.")
                     else:
                         print(f"Failed to create audio file '{audio_path}'.")
 
-                    # Use the position and size of the media placeholder (idx 15)
+                    # Position audio at placeholder location
                     if placeholder.placeholder_format.idx == 15:
                         left = placeholder.left
                         top = placeholder.top
                         width = placeholder.width
                         height = placeholder.height
-
-                        # Add the audio as a media shape to the slide at the media placeholder's position
                         slide.shapes.add_movie(audio_path, left, top, width=width, height=height)
-                        print(f"Inserted audio '{audio_path}' at the position of the media placeholder for '{chinese}'.")
 
+                    # Add clickable transparent overlay
                     if placeholder.shape_type == MSO_SHAPE_TYPE.MEDIA:
                         left = placeholder.left
                         top = placeholder.top
                         width = placeholder.width
                         height = placeholder.height
 
-                        # Add a transparent rectangle over the speaker icon
                         transparent_shape = slide.shapes.add_shape(
                             MSO_SHAPE_TYPE.RECTANGLE, left, top, width, height
                         )
                         transparent_shape.fill.solid()
-                        transparent_shape.fill.fore_color.rgb = RGBColor(255, 255, 255)  # White color
-                        transparent_shape.fill.transparency = 1.0  # Fully transparent
-                        transparent_shape.line.fill.background()  # No border
-
-                        print(f"Added a transparent clickable shape over the speaker icon for '{chinese}'.")
+                        transparent_shape.fill.fore_color.rgb = RGBColor(255, 255, 255)
+                        transparent_shape.fill.transparency = 1.0
+                        transparent_shape.line.fill.background()
 
                 except Exception as e:
                     print(f"Error adding audio for '{chinese}': {e}")
@@ -198,6 +184,17 @@ def search_pixabay_images(query, api_key):
         print(f"Error fetching images from Pixabay: {e}")
         return None
 
+# Function to translate Chinese text to English
+def translate_chinese_to_english(text):
+    """Translate Chinese to English using Google's translation service."""
+    try:
+        translator = GoogleTranslator(source='zh-CN', target='en')
+        translation = translator.translate(text)
+        return translation
+    except Exception as e:
+        print(f"Translation error: {e}")
+        return f"[Translation failed: {text}]"
+
 def run_gui():
     def select_csv():
         file_path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
@@ -218,7 +215,7 @@ def run_gui():
     # Create the Tk root window first
     root = tk.Tk()
     root.title("Mandarin Vocabulary Presentation Generator")
-    root.geometry("750x450")  # Adjusted size to better fit all content
+    root.geometry("750x500")  # Increased height from 450 to 500 to give more vertical space
     root.configure(bg="#f4f4f9")  # Set a light corporate background color
     root.resizable(False, False)  # Disable resizing to make the window fixed size
 
@@ -311,9 +308,29 @@ def run_gui():
                 with open(csv_path, mode="r", encoding="utf-8") as file:
                     reader = csv.reader(file)
                     for row in reader:
+                        # Handle different CSV formats based on auto-translate setting
                         if len(row) >= 2:
+                            # Traditional format with Chinese and English columns
                             chinese, english = row[0].strip(), row[1].strip()
                             vocab.append((chinese, english))
+                        elif len(row) == 1 and auto_translate_var.get():
+                            # Chinese-only format with auto-translation enabled
+                            chinese = row[0].strip()
+                            # Update loading message to show translation is happening
+                            loading_label.config(text=f"Translating: {chinese}...")
+                            root.update_idletasks()
+                            # Translate Chinese to English
+                            english = translate_chinese_to_english(chinese)
+                            print(f"Translated '{chinese}' to '{english}'")
+                            vocab.append((chinese, english))
+                        else:
+                            # Skip invalid rows
+                            print(f"Skipping invalid row: {row}")
+                            continue
+
+                # Update loading message to show we're generating the PPT
+                loading_label.config(text="Generating PowerPoint... Please wait.")
+                root.update_idletasks()
 
                 create_ppt_from_template(vocab, template_path, output_path)
 
@@ -385,6 +402,17 @@ def run_gui():
     )
     csv_browse_button.grid(row=2, column=2, padx=10, pady=5)
 
+    # Add auto-translation checkbox
+    auto_translate_var = tk.BooleanVar(value=False)
+    auto_translate_checkbox = tk.Checkbutton(
+        root,
+        text="Auto-translate Chinese to English",
+        variable=auto_translate_var,
+        font=("Helvetica", 10),
+        bg="#f4f4f9"
+    )
+    auto_translate_checkbox.grid(row=3, column=1, pady=5, sticky="w")  # Add in row 3
+
     # Adjust template file input
     template_entry = tk.Entry(
         root,
@@ -411,7 +439,7 @@ def run_gui():
     # Define the checkbox for toggling the default template - giving it its own row
     checkbox = tk.Checkbutton(
         root,
-        text="Use Default Template",
+        text="Use Default Template (Recommended)",
         variable=use_default_template,
         command=toggle_template,
         font=("Helvetica", 10),
@@ -452,12 +480,14 @@ def run_gui():
     )
     generate_button.grid(row=7, column=0, columnspan=3, pady=20)  # Changed from row 6 to row 7
 
-    # Adjust instructions
+    # Update instructions to reflect auto-translation feature
     instructions_label = tk.Label(
         root,
         text=(
-            "CSV Format: Each row should contain two columns: Chinese and English words, separated by a comma.\n"
-            "Example:\n"
+            "CSV Format: Each row should contain either:\n"
+            "1. Two columns: Chinese and English words, separated by a comma (e.g., 你好,Hello)\n"
+            "2. One column with only Chinese words if auto-translation is enabled (e.g., 你好)\n"
+            "\nExample:\n"
             "你好,Hello\n"
             "谢谢,Thank you\n"
             "再见,Goodbye\n"
@@ -468,7 +498,7 @@ def run_gui():
         wraplength=700,
         justify="left",
     )
-    instructions_label.grid(row=8, column=0, columnspan=3, pady=10)  # Changed from row 7 to row 8
+    instructions_label.grid(row=8, column=0, columnspan=3, pady=10)
 
     # Adjust footer
     footer_label = tk.Label(
@@ -495,15 +525,18 @@ def run_gui():
             title_label.config(text="普通话词汇演示文稿生成器")
             csv_label.config(text="词汇 CSV 文件：")
             template_label.config(text="选择 PowerPoint 模板：")  # This is the key line for translation
-            checkbox.config(text="使用默认模板")
+            checkbox.config(text="使用默认模板（推荐）")
             browse_button.config(text="浏览")
             csv_browse_button.config(text="浏览")
             output_label.config(text="输出文件名：")
             generate_button.config(text="生成演示文稿")
+            auto_translate_checkbox.config(text="自动翻译中文为英文")  # Added translation for auto-translate checkbox
             instructions_label.config(
                 text=(
-                    "CSV 格式：每行应包含两列：中文和英文单词，用逗号分隔。\n"
-                    "示例：\n"
+                    "CSV 格式：每行应包含以下内容之一：\n"
+                    "1. 两列：中文和英文单词，用逗号分隔（如：你好,Hello）\n"
+                    "2. 如果启用自动翻译，则只需一列中文单词（如：你好）\n"
+                    "\n示例：\n"
                     "你好,Hello\n"
                     "谢谢,Thank you\n"
                     "再见,Goodbye\n"
@@ -521,15 +554,18 @@ def run_gui():
             title_label.config(text="Mandarin Vocabulary Presentation Generator")
             csv_label.config(text="Vocabulary CSV File:")
             template_label.config(text="Select PowerPoint Template:")  # This is the key line for translation
-            checkbox.config(text="Use Default Template")
+            checkbox.config(text="Use Default Template (Recommended)")
             browse_button.config(text="Browse")
             csv_browse_button.config(text="Browse")
             output_label.config(text="Output File Name:")
             generate_button.config(text="Generate Presentation")
+            auto_translate_checkbox.config(text="Auto-translate Chinese to English")  # Added translation for auto-translate checkbox
             instructions_label.config(
                 text=(
-                    "CSV Format: Each row should contain two columns: Chinese and English words, separated by a comma.\n"
-                    "Example:\n"
+                    "CSV Format: Each row should contain either:\n"
+                    "1. Two columns: Chinese and English words, separated by a comma (e.g., 你好,Hello)\n"
+                    "2. One column with only Chinese words if auto-translation is enabled (e.g., 你好)\n"
+                    "\nExample:\n"
                     "你好,Hello\n"
                     "谢谢,Thank you\n"
                     "再见,Goodbye\n"
