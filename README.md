@@ -7,6 +7,10 @@ Script to create powerpoints for mandarin lessons for chinese teachers.
 The Mandarin Vocabulary Presentation Generator is a professional tool designed for Chinese language teachers and learners. It automatically creates visually engaging PowerPoint presentations for Mandarin vocabulary lessons, saving hours of manual slide creation.
 
 ![image](https://github.com/user-attachments/assets/53168ddd-263d-421b-9118-0af6cb904bcb)
+![image](https://github.com/user-attachments/assets/7d122906-bb08-4b86-9e9f-4d57327ee6c7)
+
+---
+
 ![image](https://github.com/user-attachments/assets/60728251-0d56-4b03-8519-21e6b39e4bab)
 ![image](https://github.com/user-attachments/assets/f2552bf0-5e92-484f-9d00-12ea3737e3c5)
 
