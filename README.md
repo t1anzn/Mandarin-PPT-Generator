@@ -6,6 +6,12 @@ Script to create powerpoints for mandarin lessons for chinese teachers.
 
 The Mandarin Vocabulary Presentation Generator is a professional tool designed for Chinese language teachers and learners. It automatically creates visually engaging PowerPoint presentations for Mandarin vocabulary lessons, saving hours of manual slide creation.
 
+## Why?
+
+I made this for my mum who is a mandarin teacher. She used to spend HOURS making PowerPoint slides by hand - adding Chinese characters, pinyin, translations, finding pictures...
+
+I watched her doing this repetitive task night after night and thought, "There's got to be a better way!" So I built this tool that turns what used to take her hours into something that happens with just a few clicks. Now she can focus on the fun part - actually teaching her students instead of wrestling with PowerPoint.
+
 ![image](https://github.com/user-attachments/assets/53168ddd-263d-421b-9118-0af6cb904bcb)
 ![image](https://github.com/user-attachments/assets/7d122906-bb08-4b86-9e9f-4d57327ee6c7)
 
@@ -13,8 +19,6 @@ The Mandarin Vocabulary Presentation Generator is a professional tool designed f
 
 ![image](https://github.com/user-attachments/assets/60728251-0d56-4b03-8519-21e6b39e4bab)
 ![image](https://github.com/user-attachments/assets/f2552bf0-5e92-484f-9d00-12ea3737e3c5)
-
-
 
 ### Key Features
 
@@ -24,17 +28,20 @@ The Mandarin Vocabulary Presentation Generator is a professional tool designed f
 - **Visual Learning**: Automatically fetches relevant images for each vocabulary word to enhance visual learning
 - **Customizable Templates**: Use the recommended template or your own custom PowerPoint template (WORK IN PROGRESS, default template is recommended)
 - **Multilingual Interface**: Fully supports both English and Chinese UI
+- **Learning-Optimized Animation**: Preserves animation sequencing in the template so content appears in the pedagogically correct order - Chinese characters first, followed by pinyin, and finally English translation - creating an effective learning sequence
 - **Simple CSV Input**: Create vocabulary lists using simple CSV files - either with Chinese+English pairs or Chinese-only with auto-translation
-  
+
 ---
 
 ## Auto-Translate Mode CSV Formats
+
 ### Auto-translate format, with only chinese vocabulary list
+
 ![image](https://github.com/user-attachments/assets/607d0e57-e975-4d67-b6e9-951c26d0e93c)
 ![image](https://github.com/user-attachments/assets/ff9e2681-bd45-4c59-bb7b-1187ceddc059)
 
-
 ### Manual translate, with chinese vocab and english translations next to them separated by a comma and a space (学习, Study)
+
 ![image](https://github.com/user-attachments/assets/317fecd1-4593-4811-a683-2ff526c65907)
 ![image](https://github.com/user-attachments/assets/73518299-c509-4e2e-8b4a-f7dd04862469)
 
@@ -44,7 +51,6 @@ The Mandarin Vocabulary Presentation Generator is a professional tool designed f
 
 - Chinese language teachers preparing classroom materials
 - Language schools developing curriculum resources
-- Self-learners creating study materials for Mandarin vocabulary
 - Educational content creators making Chinese learning resources
 
 The application features a clean, intuitive interface that requires no technical knowledge to operate. Simply prepare a CSV file with your vocabulary words, select your options, and generate simple but versatile presentations with a single click.

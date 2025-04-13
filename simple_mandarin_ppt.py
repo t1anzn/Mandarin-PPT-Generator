@@ -411,7 +411,7 @@ def run_gui():
         font=("Helvetica", 10),
         bg="#f4f4f9"
     )
-    auto_translate_checkbox.grid(row=3, column=1, pady=5, sticky="w")  # Add in row 3
+    auto_translate_checkbox.grid(row=3, column=1, pady=5, sticky="w")
 
     # Adjust template file input
     template_entry = tk.Entry(
@@ -436,7 +436,7 @@ def run_gui():
     )
     browse_button.grid(row=4, column=2, padx=10, pady=5)
 
-    # Define the checkbox for toggling the default template - giving it its own row
+    # Define the checkbox for toggling the default template
     checkbox = tk.Checkbutton(
         root,
         text="Use Default Template (Recommended)",
@@ -455,7 +455,7 @@ def run_gui():
         fg="#333333",
         bg="#f4f4f9"
     )
-    output_label.grid(row=6, column=0, sticky="e", padx=10, pady=5)  # Moved to row 6
+    output_label.grid(row=6, column=0, sticky="e", padx=10, pady=5)  
     output_path_var = tk.StringVar()
     tk.Entry(
         root,
@@ -464,9 +464,9 @@ def run_gui():
         font=("Helvetica", 10),
         bd=2,
         relief="groove"
-    ).grid(row=6, column=1, pady=5)  # Moved to row 6
+    ).grid(row=6, column=1, pady=5)  
 
-    # Adjust generate button - move to row 7
+    # Adjust generate button
     generate_button = tk.Button(
         root,
         text="Generate Presentation",
@@ -478,7 +478,7 @@ def run_gui():
         padx=15,
         pady=5
     )
-    generate_button.grid(row=7, column=0, columnspan=3, pady=20)  # Changed from row 6 to row 7
+    generate_button.grid(row=7, column=0, columnspan=3, pady=20)  
 
     # Update instructions to reflect auto-translation feature
     instructions_label = tk.Label(
